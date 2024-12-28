@@ -23,6 +23,12 @@ final class SignInViewModel: ObservableObject {
                 print("User created : \(model)")
             } catch {
                 print("Error: \(error.localizedDescription)")
+                do {
+                    let model = try await AuthenticationManager.shared.signIn(email: email, password: password)
+                    print("User signed in : \(model)")
+                } catch {
+                    print("Error: \(error.localizedDescription)")
+                }
             }
         }
     }
@@ -31,7 +37,8 @@ final class SignInViewModel: ObservableObject {
 struct SignInEmailView: View {
     
     @StateObject var viewModel = SignInViewModel()
-    
+    @Binding var showSignInView: Bool
+
     var body: some View {
         VStack {
             TextField("Email",
@@ -49,6 +56,7 @@ struct SignInEmailView: View {
             
             Button {
                 viewModel.signIn()
+                showSignInView = false
             } label: {
                 Text("Sign In with Email")
                     .font(.headline)
@@ -68,6 +76,6 @@ struct SignInEmailView: View {
 
 #Preview {
     NavigationStack {
-        SignInEmailView()
+        SignInEmailView(showSignInView: .constant(false))
     }
 }

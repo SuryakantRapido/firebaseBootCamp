@@ -31,4 +31,29 @@ class AuthenticationManager {
        let result =  try await Auth.auth().createUser(withEmail: email, password: password)
        return AuthDataResultModel(user: result.user)
     }
+    
+    func signIn(email: String, password: String) async throws -> AuthDataResultModel {
+        let result = try await Auth.auth().signIn(withEmail: email, password: password)
+        return AuthDataResultModel(user: result.user)
+    }
+    
+    func getAuthenticationUser() throws -> AuthDataResultModel {
+        guard let user = Auth.auth().currentUser else {
+            throw NSError(domain: "com.firebase", code: 404, userInfo: ["message": "User not found"])
+        }
+        return AuthDataResultModel(user: user)
+    }
+    
+    func signOut() throws {
+        do {
+            try Auth.auth().signOut()
+        } catch {
+            throw NSError(domain: "com.firebase", code: 404, userInfo: ["message": "User not found"])
+        }
+    }
+    
+    func signInAnonymously() async throws -> AuthDataResultModel {
+        let result = try await Auth.auth().signInAnonymously()
+        return AuthDataResultModel(user: result.user)
+    }
 }
