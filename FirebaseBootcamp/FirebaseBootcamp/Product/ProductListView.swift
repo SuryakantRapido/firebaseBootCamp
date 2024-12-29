@@ -8,8 +8,8 @@ import SwiftUI
 
 enum ProductCategory: String, CaseIterable {
     case all = "All"
-    case beauty = "Beauty"
-    case electronics = "Electronics"
+    case groceries = "groceries"
+    case furniture = "furniture"
     case clothing = "Clothing"
 }
 
@@ -17,6 +17,10 @@ enum PriceFilter: String, CaseIterable {
     case highToLow = "High to low"
     case lowToHigh = "Low to high"
     case reset = "Reset"
+    
+    var decending: Bool {
+        self == .highToLow
+    }
 }
 
 @MainActor
@@ -27,7 +31,12 @@ class ProductViewModel: ObservableObject {
         filter: ProductCategory? = nil,
         priceFilter: PriceFilter? = nil
     ) async throws {
-        self.products = try await ProductsManager.shared.fetchProductsFromFirestore()
+        self.products = try await ProductsManager
+             .shared
+             .fetchProducts(
+                filter: filter,
+                priceFilter: priceFilter
+             ).products
     }
 }
 
@@ -53,6 +62,7 @@ struct ProductListView: View {
                         ForEach(ProductCategory.allCases, id: \.self) { category in
                             Button(category.rawValue) {
                                 categoryFilter = category
+                                load()
                             }
                         }
                     }
@@ -64,17 +74,24 @@ struct ProductListView: View {
                         ForEach(PriceFilter.allCases, id: \.self) { filter in
                             Button(filter.rawValue) {
                                 priceFilter = filter
+                                load()
                             }
                         }
                     }
                 }
             }
             .task {
-                do {
-                    try await viewModel.loadProducts(filter: categoryFilter, priceFilter: priceFilter)
-                } catch {
-                    print("Error: \(error)")
-                }
+                load()
+            }
+        }
+    }
+    
+    private func load() {
+        Task {
+            do {
+                try await viewModel.loadProducts(filter: categoryFilter, priceFilter: priceFilter)
+            } catch {
+                print("Error: \(error)")
             }
         }
     }
@@ -86,7 +103,7 @@ struct ProductRow: View {
     
     var body: some View {
         HStack {
-            AsyncImage(url: URL(string: product.thumbnail)) { image in
+            AsyncImage(url: URL(string: product.thumbnail ?? "")) { image in
                 image
                     .resizable()
                     .scaledToFit()
@@ -95,9 +112,9 @@ struct ProductRow: View {
                 ProgressView()
             }
             VStack(alignment: .leading) {
-                Text(product.title)
+                Text(product.title ?? "")
                     .font(.headline)
-                Text("$\(product.price, specifier: "%.2f")")
+                Text("$\(product.price ?? 0, specifier: "%.2f")")
                     .font(.subheadline)
                     .foregroundColor(.gray)
             }

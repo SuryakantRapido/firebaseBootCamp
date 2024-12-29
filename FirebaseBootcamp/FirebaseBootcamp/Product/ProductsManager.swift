@@ -10,7 +10,11 @@ import FirebaseFirestore
 
 class ProductsManager {
     static let shared = ProductsManager()
+    private let collection = Firestore.firestore().collection("products")
     
+    private func productDocument(productId: String) -> DocumentReference {
+        collection.document(productId)
+    }
     private init() {}
     
     private func fetchProductsFromRemote() async throws -> ProductList {
@@ -23,21 +27,88 @@ class ProductsManager {
         return products
     }
     
+    func uploadProduct(product: Product) async throws {
+        try productDocument(productId: String(product.id))
+              .setData(from: product,
+                       merge: false)
+    }
+
     // store in firestore
-    private func storeProduct(product: ProductList) async throws {
-        let collection = Firestore.firestore().collection("products")
-        let _ = try collection.addDocument(from: product)
+    private func storeProduct(productList: ProductList) async throws {
+        for product in productList.products {
+            try await uploadProduct(product: product)
+        }
     }
     
     func fetchProductAndStoreInFirestore() async throws {
         let products = try await fetchProductsFromRemote()
-        try await storeProduct(product: products)
+        try await storeProduct(productList: products)
     }
     
-    func fetchProductsFromFirestore() async throws -> [Product] {
-        let snapshot = try await Firestore.firestore().collection("products").getDocuments()
-        return snapshot.documents.compactMap { queryDocumentSnapshot in
-            try? queryDocumentSnapshot.data(as: Product.self)
+    private func fetchProductsAll() async throws ->  [Product] {
+        let query = collection
+        let snapshot = try await query.getDocuments()
+        return try snapshot
+               .documents
+               .compactMap { try $0.data(as: Product.self) }
+    }
+    
+    private func fetchProducts(category: ProductCategory) async throws ->  [Product] {
+        let query = collection.whereField(Product.CodingKeys.category.rawValue, isEqualTo: category.rawValue)
+        let snapshot = try await query.getDocuments()
+        return try snapshot
+               .documents
+               .compactMap { try $0.data(as: Product.self) }
+    }
+    
+    private func fetchProducts(priceFilter: PriceFilter) async throws ->  [Product] {
+        let snapshot = try await collection
+            .order(by: Product.CodingKeys.price.rawValue,
+                   descending: priceFilter.decending)
+            .getDocuments()
+        return try snapshot
+               .documents
+               .compactMap { try $0.data(as: Product.self) }
+    }
+    
+    private func fetchProductsWithFilters(
+        filter: ProductCategory,
+        priceFilter: PriceFilter
+    ) async throws -> ProductList {
+        let snapShot: QuerySnapshot =  try await collection
+            .order(by: Product.CodingKeys.price.rawValue, descending: priceFilter.decending)
+            .whereField(Product.CodingKeys.category.rawValue, isEqualTo: filter.rawValue)
+            .getDocuments()
+        let products = try snapShot.documents.compactMap { try $0.data(as: Product.self) }
+        
+        return ProductList(products: products)
+    }
+    
+    func fetchProducts(
+        filter: ProductCategory? = nil,
+        priceFilter: PriceFilter? = nil
+    ) async throws -> ProductList {
+        if let filter = filter, let priceFilter = priceFilter {
+            return try await fetchProductsWithFilters(filter: filter, priceFilter: priceFilter)
+        } else if let filter = filter {
+            return try await ProductList(products: fetchProducts(category: filter))
+        } else if let priceFilter = priceFilter {
+            return try await fetchProducts(priceFilter: priceFilter)
+        } else {
+            return try await ProductList(products: fetchProductsAll())
         }
+    }
+}
+
+
+extension Query {
+    func getDocumentsWithSnapshot<T>(as type: T.Type) async throws -> (products: [T], lastDocument: DocumentSnapshot?) where T : Decodable {
+        let snapshot = try await self.getDocuments()
+        
+        let products = try snapshot.documents.map({ document in
+            try document.data(as: T.self)
+        })
+        
+        return (products, snapshot.documents.last)
     }
 }
